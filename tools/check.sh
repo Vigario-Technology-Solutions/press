@@ -157,15 +157,16 @@ else
     echo "press: skipping the printable-area check (no working python found)" >&2
     echo "       set PRESS_PYTHON to one if it is not on PATH as python3 or python" >&2
 fi
-# Pass four — text on text. A document can collide with itself, pass every other
-# pass, and reach paper: typst emits no warning because nothing is wrong, the
-# document is valid and simply renders on top of itself. It was found in practice
-# by people looking at rendered pages, repeatedly, which is what this removes.
+# The OVERLAP check — text printed on top of text. A document can collide with
+# itself, clear every other check, and reach paper: typst emits no warning
+# because nothing is wrong, the document is valid and simply renders on top of
+# itself. It was found in practice by people looking at rendered pages,
+# repeatedly, which is what this removes.
 #
-# Shares pass three's interpreter and skip behaviour, and the same reasoning: a
-# box with poppler and no python still gets the font checks. It does NOT share
-# its instrument — see the module docstring for why the raster cannot answer this
-# and pdftotext can.
+# Shares the printable-area check's interpreter and skip behaviour, and the same
+# reasoning: a box with poppler and no python still gets the font checks. It does
+# NOT share its instrument — see the module docstring for why the raster cannot
+# answer this and pdftotext can.
 if [ -n "$PY" ]; then
     PRESS_PDFTOTEXT="$PDFTOTEXT" "$PY" "$press_root/tools/line-overlap.py" "$pdf" || rc=1
 else

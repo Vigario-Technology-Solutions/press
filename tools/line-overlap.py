@@ -10,8 +10,8 @@ which is the failure mode `check` exists to remove.
 Reads word positions via `pdftotext -bbox-layout`, so it needs poppler — the
 same dependency `check` already asserts — plus a Python to run this file.
 
-WHY NOT THE RASTER, given pass three already renders every page
---------------------------------------------------------------
+WHY NOT THE RASTER, given the printable-area check already renders each page
+----------------------------------------------------------------------------
 Because a rendered page has thrown the answer away. "Two lines drawn on each
 other" and "one line drawn once" are the same pixels; nothing in the image says
 what was drawn on top of what. Tested anyway rather than assumed — merged-band
@@ -20,9 +20,10 @@ ZERO on the known defect at every threshold while false-positiving on a clean
 document at the low end. There is no setting that separates them.
 
 `pdftotext` works precisely because it reads the text-positioning operators the
-raster discards. That is also why pass three stays raster and this does not:
-"is there ink near the paper edge" needs no layering and must see panels and
-rules as well as glyphs, while layering is the whole of the question here.
+raster discards. That is also why the printable-area check stays raster while
+this one cannot: "is there ink near the paper edge" needs no layering at all and
+must see panels and rules as well as glyphs, whereas layering is the entire
+question here.
 
 WHY POPPLER'S LINE GROUPING RATHER THAN OUR OWN
 -----------------------------------------------

@@ -114,11 +114,20 @@ output land wherever you happened to be standing.
 
 **Run `check` before calling a document done.** It is not part of `build` — building must
 not require poppler — so it is a separate step you have to take. `just all` does not run it
-either. Three passes: typst's own warnings, fonts that are not vendored here, and the
-printable area. The last one catches a *layout* fault the others cannot — ink within 0.48in
-of a paper edge, which clips when printed at actual size and shows up nowhere on screen.
-That pass also needs a working Python and poppler's `pdftoppm`, and is skipped with
-a message when no interpreter is found.
+either. Four checks: typst's own warnings, fonts that are not vendored here, the printable
+area, and the **overlap check** — text printed on top of other text. The last two catch
+*layout* faults the font checks cannot: ink within 0.48in of a paper edge, which clips when
+printed at actual size, and lines rendered over each other, which is valid typst that simply
+comes out wrong. Neither shows up on screen in a way anyone notices.
+
+Those two take opposite instruments deliberately. The printable-area check renders the page,
+because "is there ink near the edge" needs no layering and must see panels and rules as well
+as glyphs. The overlap check cannot render, because layering is the entire question — two
+lines drawn on each other and one line drawn once are the same pixels. It reads
+`pdftotext`'s line geometry, where that information survives, and so it sees glyphs only:
+text over a panel is outside its reach.
+
+Both need a working Python, and are skipped with a message when no interpreter is found.
 
 **On Windows `python3` lies in both directions, and the cause is the App Execution
 Alias.** With the alias on and no Store Python — the stock Windows state — a
