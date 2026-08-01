@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Report lines of text printed on top of other lines, per page.
+
+Exists because a document can collide with itself, pass every other check, and
+reach paper. Nothing typst emits is wrong — the document is valid and it simply
+renders on top of itself — so there is no warning to read and no font to blame.
+It was found in practice by a person looking at a rendered page, more than once,
+which is the failure mode `check` exists to remove.
+
+Reads word positions via `pdftotext -bbox-layout`, so it needs poppler — the
+same dependency `check` already asserts — plus a Python to run this file.
+
+WHY NOT THE RASTER, given pass three already renders every page
+--------------------------------------------------------------
+Because a rendered page has thrown the answer away. "Two lines drawn on each
+other" and "one line drawn once" are the same pixels; nothing in the image says
+what was drawn on top of what. Tested anyway rather than assumed — merged-band
+detection over a five-document corpus at six thresholds from 0.001 to 0.05 scored
+ZERO on the known defect at every threshold while false-positiving on a clean
+document at the low end. There is no setting that separates them.
+
+`pdftotext` works precisely because it reads the text-positioning operators the
+raster discards. That is also why pass three stays raster and this does not:
+"is there ink near the paper edge" needs no layering and must see panels and
+rules as well as glyphs, while layering is the whole of the question here.
+
+WHY POPPLER'S LINE GROUPING RATHER THAN OUR OWN
+-----------------------------------------------
+The first attempt grouped words into lines by rounding their vertical midpoint.
+On a known-good four-page document that produced 23 false positives, worst at
+7.90pt, every one of them prose paired with an inline `raw` span: mono at a
+smaller size has a different vertical centre, so one visual line splits into two
+bands and reads as a collision.
+
+Those false positives were LARGER than the real defect they were meant to find
+(7.90pt against 2.96pt), so no tolerance could separate them. `-bbox-layout`
+emits poppler's own <line> elements, which span mixed-font runs correctly and
+take the count to zero.
+"""
+import os, re, subprocess, sys, tempfile, pathlib
+
+# A line pair must overlap by more than this to be reported. Not cosmetic, and
+# not tuned to taste: rotated text is the one construct that produces phantom
+# overlaps, because poppler segments rotated glyphs into fragments and reports
+# them as separate lines. Measured worst case was 0.13pt, on a page carrying 90°
+# and -45° rotations. The smallest GENUINE collision measured across six defect
+# shapes was 2.72pt. The floor sits in the middle of a gap with nothing in it.
+EPSILON_PT = 0.5
+
+PDFTOTEXT = os.environ.get("PRESS_PDFTOTEXT", "pdftotext")
+
+# Poppler escapes &, < and > in word text, so a parser is correct here and a
+# naive split is not. ElementTree is stdlib, which keeps this dependency-free.
+try:
+    import xml.etree.ElementTree as ET
+except ImportError:                                  # pragma: no cover
+    ET = None
+
+
+def layout(pdf, tmp):
+    out = pathlib.Path(tmp) / "layout.xml"
+    try:
+        subprocess.run([PDFTOTEXT, "-bbox-layout", pdf, str(out)],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        # Same reasoning as ink-margin.py: without this the failure is a bare
+        # traceback naming neither the missing tool nor the remedy.
+        sys.exit(f"press: line-overlap check needs poppler; {PDFTOTEXT} not found\n"
+                 f"       set PRESS_PDFTOTEXT to poppler's binary if it is not on PATH")
+    except subprocess.CalledProcessError:
+        sys.exit(f"press: {PDFTOTEXT} could not read {pdf}")
+    return out.read_text(encoding="utf-8", errors="replace")
+
+
+def lines_by_page(xml):
+    """[(yMin, yMax, xMin, xMax, text)] per page, in document order."""
+    # Namespaced by poppler; strip it rather than carry a prefix everywhere.
+    root = ET.fromstring(re.sub(r'\sxmlns="[^"]+"', "", xml, count=1))
+    for page in root.iter("page"):
+        rows = []
+        for ln in page.iter("line"):
+            words = [(w.text or "") for w in ln.iter("word")]
+            text = " ".join(w for w in words if w.strip())
+            if not text:
+                continue                              # whitespace-only, nothing drawn
+            rows.append((float(ln.get("yMin")), float(ln.get("yMax")),
+                         float(ln.get("xMin")), float(ln.get("xMax")), text))
+        yield sorted(rows)
+
+
+def collisions(rows):
+    for i, (yA0, yA1, xA0, xA1, tA) in enumerate(rows):
+        for yB0, yB1, xB0, xB1, tB in rows[i + 1:]:
+            # Sorted by yMin, so once a later line starts below this one's
+            # bottom, nothing after it can overlap either.
+            if yB0 >= yA1:
+                break
+            # Side by side rather than stacked. Two columns, or a heading and a
+            # right-aligned label, legitimately share vertical space — it is only
+            # a collision if they also share horizontal space.
+            if xA1 <= xB0 or xB1 <= xA0:
+                continue
+            ov = min(yA1, yB1) - max(yA0, yB0)
+            if ov > EPSILON_PT:
+                yield ov, tA, tB
+
+
+def main():
+    if ET is None:
+        print("press: skipping the line-overlap check (no xml parser in this python)",
+              file=sys.stderr)
+        return 0
+    pdf = sys.argv[1]
+    rc = 0
+    with tempfile.TemporaryDirectory() as tmp:
+        for n, rows in enumerate(lines_by_page(layout(pdf, tmp)), 1):
+            for ov, upper, lower in collisions(rows):
+                print(f"press: {pdf} page {n} prints text on text — {ov:.2f}pt overlap",
+                      file=sys.stderr)
+                print(f"    upper: {upper[:72]}", file=sys.stderr)
+                print(f"    lower: {lower[:72]}", file=sys.stderr)
+                rc = 1
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())
