@@ -66,8 +66,15 @@ def layout(pdf, tmp):
     except FileNotFoundError:
         # Same reasoning as ink-margin.py: without this the failure is a bare
         # traceback naming neither the missing tool nor the remedy.
-        sys.exit(f"press: line-overlap check needs poppler; {PDFTOTEXT} not found\n"
+        sys.exit(f"press: overlap check needs poppler; {PDFTOTEXT} not found\n"
                  f"       set PRESS_PDFTOTEXT to poppler's binary if it is not on PATH")
+    except OSError as e:
+        # FOUND but not runnable. Aiming PRESS_PDFTOTEXT at a shell script on
+        # Windows raises WinError 193 rather than FileNotFoundError, and the bare
+        # traceback for that names CreateProcess instead of the variable that
+        # caused it. Measured while testing the branch above.
+        sys.exit(f"press: {PDFTOTEXT} could not be run ({e})\n"
+                 f"       PRESS_PDFTOTEXT must name an executable, not a script")
     except subprocess.CalledProcessError:
         sys.exit(f"press: {PDFTOTEXT} could not read {pdf}")
     return out.read_text(encoding="utf-8", errors="replace")
@@ -76,7 +83,15 @@ def layout(pdf, tmp):
 def lines_by_page(xml):
     """[(yMin, yMax, xMin, xMax, text)] per page, in document order."""
     # Namespaced by poppler; strip it rather than carry a prefix everywhere.
-    root = ET.fromstring(re.sub(r'\sxmlns="[^"]+"', "", xml, count=1))
+    try:
+        root = ET.fromstring(re.sub(r'\sxmlns="[^"]+"', "", xml, count=1))
+    except ET.ParseError as e:
+        # A truncated or non-XML answer means the binary is not producing what
+        # -bbox-layout should, which is a tooling fault rather than a document
+        # one. Same reasoning as the FileNotFoundError branch above: a bare
+        # ParseError traceback names neither the cause nor the remedy.
+        sys.exit(f"press: {PDFTOTEXT} did not return usable -bbox-layout XML ({e})\n"
+                 f"       set PRESS_PDFTOTEXT to poppler's pdftotext if it is not on PATH")
     for page in root.iter("page"):
         rows = []
         for ln in page.iter("line"):
@@ -99,6 +114,14 @@ def collisions(rows):
             # Side by side rather than stacked. Two columns, or a heading and a
             # right-aligned label, legitimately share vertical space — it is only
             # a collision if they also share horizontal space.
+            #
+            # No epsilon on this axis, deliberately. It would guard a case that
+            # does not occur: across the corpus the smallest horizontal overlap
+            # among pairs that clear the vertical test is 144.68pt, some 290x any
+            # floor worth setting. The vertical epsilon exists because rotation
+            # produces measured 0.13pt phantoms; nothing analogous shows up here,
+            # and a threshold with no measurement behind it is a guess that later
+            # reads as a finding.
             if xA1 <= xB0 or xB1 <= xA0:
                 continue
             ov = min(yA1, yB1) - max(yA0, yB0)
