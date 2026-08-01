@@ -1,0 +1,130 @@
+name: Commit convention
+
+# Both ends of the convention — rule 7.
+#
+#   Validate PR title   pull_request.  A gate: it can block the merge.
+#   Lint main           push.          A notification: the commit already exists.
+#
+# WHY BOTH, when squash-only means the title becomes the commit. Because
+# `squash_merge_commit_title=PR_TITLE` PRE-FILLS the subject and does not bind it.
+# Whoever merges can edit the field in the confirmation dialog, and the merge API
+# takes a commit title as an argument — `gh pr merge --subject` exists for that
+# reason. So the string this gate checked and the string that landed are not
+# guaranteed to be the same string, and nothing runs in between.
+#
+# That makes the second job the only thing that ever sees what was actually
+# written. It is not a backstop for exotic routes — a bypass push, an emergency
+# `enforcement: disabled` — though it catches those too. An ordinary merge is
+# equally unguarded.
+#
+# Lint main MUST NOT become a required status check. It cannot report on a
+# pull_request event, so requiring it would leave every PR waiting on a context
+# that will never arrive — rule 12 names that trap explicitly.
+#
+# WHY COCOGITTO. This repository is Typst, shell and fonts. It has no package.json,
+# no lockfile and no node, and the alternative would mean adding all three so that
+# CI could check one sentence. `cog` is a single statically-linked binary, so each
+# job is a download and a command, and press stays a repository that can be read
+# without installing a language runtime it does not otherwise use.
+#
+# Three things about cog worth knowing, measured rather than assumed:
+#
+#   · its default type set is exactly the eleven the specification's reference
+#     implementation ships — build, chore, ci, docs, feat, fix, perf, refactor,
+#     revert, style, test. `wibble:` is rejected.
+#   · it matches the type case-insensitively: `Feat:` and `FIX:` both pass, which
+#     is specification item 15.
+#   · `[commit_types]` in a cog.toml is ADDITIVE ONLY. A type can be added; none of
+#     the eleven can be removed, so `feat` and `fix` are structurally guaranteed.
+#
+# So there is no cog.toml. Configuring the type set could only restate the default,
+# which rule 6 says no repository should do. What is worth pinning — which cog — is
+# pinned below by digest.
+#
+# `cog check` reads merge commits by default; `--ignore-merge-commits` is opt-in and
+# is deliberately not passed. `required_linear_history` should mean no merge ever
+# lands on main; if one does, this is the thing that says so.
+
+on:
+  pull_request:
+    # `edited` re-runs when the title changes, so fixing a bad title turns the
+    # check green without needing an empty commit to re-trigger it.
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  # contents only. The title is read from the event payload, not fetched from the
+  # pull request API, so nothing here needs pull-requests: read.
+  contents: read
+
+env:
+  # Pinned by version AND by digest. The binary comes from a third-party release
+  # page, a tag can be moved, and this runs on every pull request — a version alone
+  # is a pin against accident, not against substitution.
+  COG_VERSION: "7.0.0"
+  COG_SHA256: "e03938ff2c4c86d71c00c0f3284dbbe95c5ca76fe34a51f33e945c23010d59bb"
+
+jobs:
+  validate:
+    name: Validate PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # cog verify reads the piped string. It needs no git history.
+          fetch-depth: 1
+
+      # Installs the pinned binary AND gives git an identity, without which
+      # `cog verify` aborts with a core dump. See the script.
+      - name: Set up cocogitto
+        run: sh .github/setup-cog.sh
+
+      - name: Verify the PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        # --file - reads the message from stdin, so the title is never an argv
+        # element and a title beginning with `-n` or `--help` cannot be read as an
+        # option. printf rather than echo for the same reason on the other side:
+        # POSIX echo eats `-n` as a flag and would hand cog a truncated string.
+        run: printf '%s\n' "$TITLE" | cog verify --file -
+
+  main:
+    name: Lint main
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the range below asks what landed, and a depth of 1
+          # cannot answer that for a push carrying more than one commit.
+          fetch-depth: 0
+
+      - name: Set up cocogitto
+        run: sh .github/setup-cog.sh
+
+      - name: Check every subject that landed
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          # Three ways the range can be meaningless, and they look alike from inside
+          # the job: an all-zero `before` on a branch's first push, a `before` whose
+          # object is gone, and a `before` that still EXISTS but is no longer an
+          # ancestor of `after` — what a force-push leaves behind. The last is the
+          # dangerous one: the range resolves, nothing errors, and it expands to
+          # every commit not shared between the two tips. Ancestry is the question,
+          # not existence.
+          #
+          # Falling back to the head commit rather than failing: a check that errors
+          # on its own inputs reports nothing about the record it exists to protect.
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+             || ! git merge-base --is-ancestor "$BEFORE" "$AFTER" 2>/dev/null; then
+            echo "no reachable range; checking the head commit only"
+            git log -1 --pretty=%B | cog verify --file -
+          else
+            cog check "$BEFORE..$AFTER"
+          fi

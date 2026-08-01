@@ -1,0 +1,40 @@
+# Dependabot — one ecosystem, because one applies.
+#
+# `github-actions` is the whole surface here. This repository has no package.json,
+# no Cargo.toml and no requirements.txt; its dependencies are Typst packages
+# vendored in-tree and fonts committed as files, neither of which Dependabot
+# understands. Listing an ecosystem with nothing to update would be a claim without
+# a subject.
+#
+# What it does watch: the third-party actions in .github/workflows and in
+# .github/actions/typst-toolchain, which are the one thing here that moves without
+# anyone editing this repository.
+#
+# It does NOT watch the cocogitto pin in commit-convention.yml. That is a version
+# and a digest in an `env:` block, not a dependency declaration, so a bump is a
+# deliberate edit: change both, and CI proves the digest matches before the change
+# can merge.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      # Conventional Commits, because Lint main checks whatever reaches the branch
+      # and a Dependabot subject is not exempt from it.
+      prefix: chore
+
+  # The composite action needs its own entry. `directory: /` covers
+  # .github/workflows/, and a composite lives at .github/actions/<name>/action.yml,
+  # which that scan does not reach — so a `uses:` added there would be invisible.
+  #
+  # It has none today, so this watches nothing yet. That is the point: the entry is
+  # cheap now and the gap would be silent later, and silent is the failure mode this
+  # whole arrangement is built to avoid.
+  - package-ecosystem: github-actions
+    directory: /.github/actions/typst-toolchain
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore

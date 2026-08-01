@@ -1,0 +1,125 @@
+name: CI
+
+# Public repository, so minutes are free and uncapped — rule 5. That is the case
+# rule 12 is derived for, and one job per assertion is the shape here.
+#
+#   Documents build          typst compile errors.
+#   Documents pass the audit press's own passes, run against its own document:
+#                            typst warnings that exit 0 and ship, fonts that are
+#                            not vendored, and ink inside the unprintable band.
+#   No invisible characters  soft hyphens and zero-width characters in any tracked
+#                            file, which reach paper unseen and survive review.
+#   Shell scripts lint       every *.sh in the tree. tools/check.sh is the audit
+#                            itself, and every defect found in it this far has been
+#                            a shell defect — a pipeline exit masked by sort, a
+#                            guard that asserted existence where ancestry was the
+#                            question — so the script that judges every document is
+#                            worth judging.
+#
+# press is vendored as a submodule by every repository that builds a document, so
+# a bad commit on main reaches all of them before anyone notices. That is why this
+# exists at all, and why it fans out rather than reporting one aggregate answer.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Documents build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/typst-toolchain
+      - run: just all
+
+  audit:
+    name: Documents pass the audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/typst-toolchain
+        with:
+          poppler: "true"
+      - name: Build, then audit
+        run: |
+          set -euo pipefail
+          # check refuses to audit a document that was never built, and this is a
+          # separate job with no artifact between them. The build is a precondition
+          # here, not the assertion — a compile failure is Documents build's to report.
+          just all
+          for f in docs/*.typ; do just check "$f"; done
+
+  invisible:
+    name: No invisible characters
+    runs-on: ubuntu-latest
+    steps:
+      # Reads the tree and nothing else: no toolchain, no fonts.
+      - uses: actions/checkout@v7
+        with:
+          # git grep reads the index, so the whole tracked tree must be present.
+          fetch-depth: 1
+      - name: Scan
+        run: |
+          set -uo pipefail
+          # U+00AD soft hyphen, U+200B..U+200D zero-width, U+2060 word joiner,
+          # U+FEFF BOM.
+          #
+          # EVERY TRACKED FILE, not a list of extensions. This globbed *.typ and
+          # *.md, while the job is named for the tree — a promise an extension list
+          # cannot keep. A soft hyphen in a YAML comment or a shell string is
+          # exactly as invisible and reaches a reader the same way. Demonstrated
+          # rather than assumed: with one planted in .github/dependabot.yml, the old
+          # scan exited 1 and reported the tree clean.
+          #
+          # `git grep` rather than `grep -r`, for three reasons that all matter here:
+          #   · it searches the tracked tree by definition, so .git and print/ are
+          #     excluded without naming them, and a file nobody committed cannot
+          #     fail the build;
+          #   · it is ONE process, so its exit code is grep's. Piping `git ls-files`
+          #     into `xargs grep` would not be — xargs returns 123 when any
+          #     invocation exits 1, so "no match" would stop looking like no match
+          #     the moment the file list needed splitting;
+          #   · -I skips binary files, which is what keeps fonts/*.ttf from being
+          #     read as text and matching by coincidence.
+          #
+          # It exits 0 on a match, 1 on no match, and something else on error. An
+          # `if git grep` would treat every error as "no match", so a scanner that
+          # could not run at all would report the tree clean. `|| rc=$?` because the
+          # runner invokes this as `bash -e`, where a bare 1 would abort before the
+          # status could be read.
+          rc=0
+          out=$(git grep -nIP '[\x{00AD}\x{200B}-\x{200D}\x{2060}\x{FEFF}]') || rc=$?
+          case "$rc" in
+            0) printf '%s\n' "$out"
+               echo "::error::invisible characters found — see the lines above"
+               exit 1 ;;
+            1) echo "no invisible characters in any tracked file" ;;
+            *) echo "::error::the invisible-character scan itself failed (git grep exit $rc)"
+               exit 1 ;;
+          esac
+
+  shell:
+    name: Shell scripts lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          # Every shell script in the tree, found rather than listed. A glob of
+          # tools/*.sh was correct until a script appeared under .github/, and a
+          # job called "Shell scripts lint" that misses one is overclaiming by the
+          # width of whatever was added last.
+          find . -path ./.git -prune -o -name '*.sh' -print0 \
+            | xargs -0 --no-run-if-empty shellcheck --severity=warning
