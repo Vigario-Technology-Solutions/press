@@ -130,7 +130,8 @@ new name:
 
 # Audit a built document for the font failures typst does not report
 #
-# Two passes, because there are two ways to lose a glyph and neither warns.
+# Two of these checks exist because there are two ways to lose a glyph, and
+# neither warns.
 #
 #   SUBSTITUTED — the codepoint is missing from every vendored face, so typst
 #   draws it from one of its OWN embedded fonts. Measured on this package:
@@ -142,16 +143,17 @@ new name:
 #   half: a substitution ships the wrong glyph, a disappearance ships missing
 #   content, and a printed sheet cannot be diffed against anything.
 #
-# Pass zero is typst's own warnings. `build` exits 0 on them and typst has no
+# The WARNINGS check reads typst's own output. `build` exits 0 on warnings and
+# typst has no
 # deny-warnings flag, so a warning ships unless something reads it — markdown
-# `**bold**` silently renders as nothing, an unknown font family falls back. This
+# `**bold**` silently renders as nothing, an unknown font family falls back. It
 # recompiles and fails on any warning, which is the only enforcement available.
 #
-# The first pass catches substitution by listing embedded faces that are not
-# vendored here. The second catches disappearance by rendering each non-ASCII
-# character from the source in ISOLATION and asking whether it survived.
+# The FONT check catches substitution by listing embedded faces that are not
+# vendored here. The GLYPH check catches disappearance by rendering each
+# non-ASCII character from the source in ISOLATION and asking whether it survived.
 #
-# Pass two probes rather than reading the document's own text layer, because
+# The glyph check probes rather than reading the document's own text layer, because
 # that layer lies. In `A ⛔ B 📋 C` with neither symbol drawable, only the FIRST
 # unmapped character is dropped from the extracted text; the rest remain in it
 # and read back as present. A whole-document scan therefore reports one missing
@@ -163,13 +165,13 @@ new name:
 # it stays correct when typst changes what it bundles.
 #
 # LIMITS, stated because a check trusted past its reach is worse than none:
-#   · `#sym.checkmark` and friends carry no source codepoint, so pass two cannot
-#     see them — pass one still catches the substitution they cause.
+#   · `#sym.checkmark` and friends carry no source codepoint, so the glyph check
+#     cannot see them — the font check still catches the substitution they cause.
 #   · Non-ASCII inside a comment is not rendered and will report as vanished.
 #     Full-line `//` comments are skipped; trailing ones are not.
 #   · A probe asks "can any vendored face draw this", not "does THIS document's
 #     face draw it". A glyph present only in the mono face still substitutes in
-#     body text — pass one is what catches that.
+#     body text — the font check is what catches that.
 #   · Space separators and format characters are not probed at all. Nothing is
 #     drawn for them, so "did it survive" has no answer, and pdftotext hands
 #     back a plain space for U+00A0 — which read as vanished and failed correct
@@ -198,7 +200,7 @@ new name:
 #     small phantom overlap — worst measured 0.13pt against a smallest genuine
 #     collision of 2.72pt. The 0.5pt floor exists for that gap and nothing else,
 #     so a document leaning heavily on rotation deserves a look by eye.
-#   · The printable-area pass additionally needs a Python and poppler's
+#   · The printable-area check additionally needs a Python and poppler's
 #     pdftoppm, and is skipped with a message rather than failing when no
 #     interpreter is found. PRESS_PYTHON and PRESS_PDFTOPPM name either
 #     directly. The interpreter is found by EXECUTING a candidate, not by
@@ -208,18 +210,18 @@ new name:
 #     both ways: it ran a stub that could not work, and skipped where a working
 #     interpreter was present under the other name.
 #
-# Pass three checks that no ink comes within 0.48in of a paper edge — the
-# 0.5in safe area the page presets are built around, less a rendering
+# The PRINTABLE-AREA check verifies that no ink comes within 0.48in of a paper
+# edge — the 0.5in safe area the page presets are built around, less a rendering
 # tolerance.
 #
-# The overlap check reports any line of text printed on top of another. It and
-# the printable-area check are both LAYOUT faults rather than font ones, and they
+# The OVERLAP check reports any line of text printed on top of another. It and
+# the printable-area check catch LAYOUT faults rather than font ones, and they
 # take opposite instruments for a reason worth stating: the printable-area check
-# renders the page, because
-# "is there ink near the edge" needs no layering and must see panels and rules as
-# well as glyphs. The overlap check cannot render, because layering is the whole
-# question — two lines drawn on each other and one line drawn once are the same
-# pixels. It reads pdftotext's line geometry, where that information survives.
+# renders the page, because "is there ink near the edge" needs no layering, and
+# it must see panels and rules as well as glyphs. The overlap check cannot render,
+# because layering is the whole question — two lines drawn on each other and one
+# line drawn once are the same pixels. It reads pdftotext's line geometry, where
+# that information survives.
 #
 # The passes themselves live in tools/check.sh. They were inline here until a
 # `just` recipe carrying a #!/bin/sh shebang turned out to be translated through

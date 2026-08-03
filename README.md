@@ -127,8 +127,8 @@ typst compile --root . \
 ```
 
 `check` additionally needs **poppler** — `pdffonts`, `pdftotext` and `pdftoppm`, all
-three — plus a **Python** for the printable-area pass. It is deliberately not part of
-`build`, so building never depends on any of it.
+three — plus a **Python** for the printable-area and overlap checks. It is deliberately
+not part of `build`, so building never depends on any of it.
 
 #### On Windows, `python3` lies in both directions
 
@@ -143,9 +143,11 @@ cannot tell either of them from a working interpreter.
 | Alias off (uv's setup recommends this) | **fails** | A working `python` is right there under the other name |
 | Store Python installed | succeeds | Genuinely works |
 
-The middle row is the dangerous one, because the pass skips *silently* and the
-document is reported clean. That is not hypothetical: it hid a real 0.32in clipping
-fault in a document whose entire purpose was to be printed.
+The middle row is the dangerous one. The checks that need an interpreter —
+printable-area and overlap — are skipped, and while the skip is announced on
+stderr the **verdict is still clean**. A green verdict is what gets believed.
+That is not hypothetical: it hid a real 0.32in clipping fault in a document whose
+entire purpose was to be printed.
 
 The first row has already misdirected a change. `server-admin#82` recorded
 `Python was not found` in its verification notes, concluded *"so poppler does not
