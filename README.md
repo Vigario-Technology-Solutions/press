@@ -143,8 +143,9 @@ cannot tell either of them from a working interpreter.
 | Alias off (uv's setup recommends this) | **fails** | A working `python` is right there under the other name |
 | Store Python installed | succeeds | Genuinely works |
 
-The middle row is the dangerous one, because the checks that need an interpreter —
-printable-area and overlap — skip *silently* and the document is reported clean.
+The middle row is the dangerous one. The checks that need an interpreter —
+printable-area and overlap — are skipped, and while the skip is announced on
+stderr the **verdict is still clean**. A green verdict is what gets believed.
 That is not hypothetical: it hid a real 0.32in clipping fault in a document whose
 entire purpose was to be printed.
 

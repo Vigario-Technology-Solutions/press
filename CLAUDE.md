@@ -144,7 +144,8 @@ With the alias off, which uv's own setup recommends, there is a perfectly good
 `python` and no `python3` at all. A name-based guard passes the first and skips the
 second, and both are wrong.
 
-The second is the dangerous one: it skips *silently* and reports the document clean.
+The second is the dangerous one: the check is skipped — announced on stderr — and
+the document is still reported clean, which is the part anyone acts on.
 It hid a real 0.32in clipping fault here. The first has already misdirected a change
 — `server-admin#82` recorded `Python was not found` in its verification notes,
 concluded "so poppler does not resolve", and merged it as environmental. Wrong

@@ -47,9 +47,10 @@ printf '\302\240\n' | grep -qP '(*UTF)^[\p{Z}\p{Cf}]$' 2>/dev/null \
 # pdftotext and pdffonts are also shipped by Xpdf and mupdf, and they do not agree.
 # Measured over one document: Xpdf's default output encoding is Latin-1, which loses
 # every non-ASCII character — so every glyph looks missing, and the glyph check
-# accuses a correct document sixteen times over. mupdf's reports a different set again. The
-# extractor is not an implementation detail here; it is the instrument the verdict
-# is read off, and three instruments give three verdicts on identical input.
+# accuses a correct document sixteen times over. mupdf's copy reports a different
+# set again. The extractor is not an implementation detail here; it is the
+# instrument the verdict is read off, and three instruments give three verdicts
+# on identical input.
 #
 # This matters most where it is least visible: Git for Windows bundles Xpdf's
 # pdftotext in mingw64/bin and Git Bash puts that ahead of a system poppler, so a

@@ -166,8 +166,7 @@ new name:
 #
 # LIMITS, stated because a check trusted past its reach is worse than none:
 #   · `#sym.checkmark` and friends carry no source codepoint, so the glyph check
-#     cannot
-#     see them — the font check still catches the substitution they cause.
+#     cannot see them — the font check still catches the substitution they cause.
 #   · Non-ASCII inside a comment is not rendered and will report as vanished.
 #     Full-line `//` comments are skipped; trailing ones are not.
 #   · A probe asks "can any vendored face draw this", not "does THIS document's
@@ -218,10 +217,11 @@ new name:
 # The OVERLAP check reports any line of text printed on top of another. It and
 # the printable-area check catch LAYOUT faults rather than font ones, and they
 # take opposite instruments for a reason worth stating: the printable-area check
-# renders the page, because "is there ink near the edge" needs no layering and
-# must see panels and rules as well as glyphs. The overlap check cannot render, because layering is the whole
-# question — two lines drawn on each other and one line drawn once are the same
-# pixels. It reads pdftotext's line geometry, where that information survives.
+# renders the page, because "is there ink near the edge" needs no layering, and
+# it must see panels and rules as well as glyphs. The overlap check cannot render,
+# because layering is the whole question — two lines drawn on each other and one
+# line drawn once are the same pixels. It reads pdftotext's line geometry, where
+# that information survives.
 #
 # The passes themselves live in tools/check.sh. They were inline here until a
 # `just` recipe carrying a #!/bin/sh shebang turned out to be translated through
