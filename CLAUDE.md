@@ -114,11 +114,19 @@ output land wherever you happened to be standing.
 
 **Run `check` before calling a document done.** It is not part of `build` — building must
 not require poppler — so it is a separate step you have to take. `just all` does not run it
-either. Four checks: typst's own warnings, fonts that are not vendored here, the printable
-area, and the **overlap check** — text printed on top of other text. The last two catch
-*layout* faults the font checks cannot: ink within 0.48in of a paper edge, which clips when
-printed at actual size, and lines rendered over each other, which is valid typst that simply
-comes out wrong. Neither shows up on screen in a way anyone notices.
+either. Five checks, each named for what it asks:
+
+| check | asks |
+|---|---|
+| **warnings** | did typst warn — it exits 0 on warnings and has no deny-warnings flag |
+| **font** | does the PDF draw from a face not vendored here (a *substitution*) |
+| **glyph** | did every non-ASCII character in the source survive to the page (a *disappearance*) |
+| **printable-area** | is any ink within 0.48in of a paper edge |
+| **overlap** | is any line of text printed on top of another |
+
+The last two catch *layout* faults the font checks cannot: ink that clips when printed at
+actual size, and lines rendered over each other, which is valid typst that simply comes out
+wrong. Neither shows up on screen in a way anyone notices.
 
 Those two take opposite instruments deliberately. The printable-area check renders the page,
 because "is there ink near the edge" needs no layering and must see panels and rules as well
@@ -142,8 +150,9 @@ It hid a real 0.32in clipping fault here. The first has already misdirected a ch
 concluded "so poppler does not resolve", and merged it as environmental. Wrong
 subsystem; nothing to do with poppler.
 
-So the pass probes by **executing** a candidate rather than resolving a name, and
-accepts `python`. `PRESS_PYTHON` and `PRESS_PDFTOPPM` name either directly, for the
+So `check` probes by **executing** a candidate rather than resolving a name, and
+accepts `python`. Both the printable-area and overlap checks depend on it.
+`PRESS_PYTHON` and `PRESS_PDFTOPPM` name either directly, for the
 same reason `PRESS_PDFTOTEXT` exists: on Windows `PATH` is not the contributor's to
 order.
 

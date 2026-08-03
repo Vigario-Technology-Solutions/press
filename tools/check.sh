@@ -29,10 +29,10 @@ shift 3
 # rebuilding it keeps this file from drifting away from build and watch.
 
 test -f "$pdf" || { echo "press: not built yet — run build first: $pdf" >&2; exit 1; }
-# The glyph pass needs a grep that speaks PCRE, honours the (*UTF) verb, and knows
+# The glyph check needs a grep that speaks PCRE, honours the (*UTF) verb, and knows
 # \p{...} properties. Assert it here rather than relying on the pipeline to complain:
 # $? in `a | b | sort` belongs to sort, so a grep that rejects any of the three leaves
-# the character list empty and the pass skips itself while the recipe goes on to report
+# the character list empty and the check skips itself while the recipe goes on to report
 # the document clean. Probing once, up front, is the difference between an unmet
 # dependency and a check that quietly does nothing.
 #
@@ -46,8 +46,8 @@ printf '\302\240\n' | grep -qP '(*UTF)^[\p{Z}\p{Cf}]$' 2>/dev/null \
 #
 # pdftotext and pdffonts are also shipped by Xpdf and mupdf, and they do not agree.
 # Measured over one document: Xpdf's default output encoding is Latin-1, which loses
-# every non-ASCII character — so every glyph looks missing, and pass two accuses a
-# correct document sixteen times over. mupdf's reports a different set again. The
+# every non-ASCII character — so every glyph looks missing, and the glyph check
+# accuses a correct document sixteen times over. mupdf's reports a different set again. The
 # extractor is not an implementation detail here; it is the instrument the verdict
 # is read off, and three instruments give three verdicts on identical input.
 #
@@ -81,7 +81,7 @@ for spec in "PRESS_PDFTOTEXT $PDFTOTEXT" "PRESS_PDFFONTS $PDFFONTS"; do
         || { echo "press: $tool is not poppler's —" >&2
              "$tool" -v 2>&1 | head -1 | sed 's/^/  /' >&2
              echo "       extractors disagree about which glyphs a PDF contains, so the" >&2
-             echo "       glyph pass is only meaningful against poppler." >&2
+             echo "       glyph check is only meaningful against poppler." >&2
              echo "       Put it first on PATH, or set $var to it directly." >&2
              exit 1; }
 done
@@ -89,13 +89,13 @@ allow=$(ls "$press_root/fonts" | sed 's/-[A-Za-z]*\.[to]tf$//;s/\.[to]tf$//' | s
 rc=0
 # Recompile FIRST, and keep the compiler's own status.
 #
-# Every pass below reads $pdf, so the recompile has to happen before any of them or
+# Every check below reads $pdf, so the recompile has to happen before any of them or
 # they audit whatever build last left there. Ordering it after the printable-area
-# pass meant that pass alone judged a different artifact than the font passes: a
+# check meant that one alone judged a different artifact than the font checks: a
 # source edited to paint ink 0.05in from the edge was reported clean, because the
 # margins were measured on the previous build and the fresh PDF was written after.
-# That is the one pass whose whole justification is that the fault is invisible
-# until it is on paper.
+# That is the check whose whole justification is that the fault is invisible until
+# it is on paper.
 #
 # And the status must come from typst, not from the grep reading its output. Piping
 # into grep hands $? to grep, so a source that did not compile at all left the old
@@ -106,7 +106,7 @@ out=$(typst compile "$@" "$src" "$pdf" 2>&1) || {
     printf '%s\n' "$out" | sed 's/^/  /' >&2
     exit 1
 }
-# Pass three — printable area. A document can overflow the unprintable band
+# The PRINTABLE-AREA check. A document can overflow the unprintable band
 # silently: typst has no concept of it, so the failure appears on paper and
 # nowhere else. Skipped rather than fatal where no interpreter is present,
 # because font checking is worth having on its own and press must stay usable on
@@ -116,11 +116,11 @@ out=$(typst compile "$@" "$src" "$pdf" 2>&1) || {
 #
 #   Present but not real: the stock Windows App Execution Alias puts a zero-byte
 #   python3 on PATH that prints "Python was not found" and exits 49. command -v
-#   said yes, the pass ran, and check exited 1 having printed nothing but a
-#   Microsoft Store advert.
+#   said yes, the printable-area check ran, and check exited 1 having printed
+#   nothing but a Microsoft Store advert.
 #
 #   Real but not named python3: disabling that alias — which uv's own setup
-#   recommends — leaves a working `python` and no `python3` at all, so the pass
+#   recommends — leaves a working `python` and no `python3` at all, so the check
 #   silently skipped forever. Measured on a host where it hid a genuine 0.32in
 #   clipping fault in a document whose entire purpose was to be printed.
 #
