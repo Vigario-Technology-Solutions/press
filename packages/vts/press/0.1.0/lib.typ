@@ -394,6 +394,11 @@
 // height depends on where it wraps. Counting source lines guesses at that and is
 // wrong wherever prose wraps differently from markup.
 #let units(..items, pack: "stacks", gutter: 9pt, spacing: 6pt) = {
+  // Fail on an unknown value rather than falling through. `pack: "stack"` would
+  // otherwise render the default and look deliberate, which is the failure mode
+  // this whole package is meant to make loud.
+  assert(pack in ("stacks", "grid", "single"),
+         message: "units(pack:) expects \"stacks\", \"grid\" or \"single\"; got \"" + pack + "\"")
   let us = items.pos()
   let stack(col) = {
     for (i, u) in col.enumerate() {
@@ -408,6 +413,7 @@
     return grid(columns: (1fr, 1fr), gutter: gutter, row-gutter: spacing, ..us)
   }
 
+  // pack == "stacks", guaranteed by the assert above.
   layout(size => {
     let w = (size.width - gutter) / 2
     let left = ()
