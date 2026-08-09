@@ -295,9 +295,9 @@
 // `caps` forwards to the label's `eyebrow` — see the note there. This is the
 // most-used call in the vocabulary, so it is where the uppercasing does the most
 // damage: `unit([pH], "warn")` renders "PH" with nothing to indicate it happened.
-#let unit(label, tone, lead, body, caps: true) = {
+#let unit(label, tone, lead, body, caps: true, breakable: false) = {
   let pair = tones.at(tone)
-  block(width: 100%, breakable: false, stroke: (left: 2.5pt + pair.at(0)),
+  block(width: 100%, breakable: breakable, stroke: (left: 2.5pt + pair.at(0)),
         fill: paper-tint, inset: (x: 8pt, y: 6.5pt))[
     #eyebrow(label, color: pair.at(0), caps: caps)
     #v(2.5pt)
@@ -376,3 +376,49 @@
 #let seedepth(label) = text(size: sz.fine, fill: ink-faint, style: "italic")[
   #sym.arrow.r detail: #label
 ]
+
+
+// Lay out a set of units. The document still owns its page; this owns only how a
+// GROUP packs, which is the one thing every document was re-deriving by hand.
+//
+//   "stacks"  two columns filled independently and balanced by MEASURED height.
+//             Nothing is padded to match a neighbour, which is the failure of a
+//             row grid: a row is as tall as its tallest cell, so a short unit
+//             beside a long one leaves the gap under it.
+//   "grid"    row-major cells. Keeps units aligned across a row — correct when
+//             the pairing means something, and the source of that gap when it
+//             does not.
+//   "single"  one column, full width.
+//
+// Balancing measures at the real column width inside `layout`, because a unit's
+// height depends on where it wraps. Counting source lines guesses at that and is
+// wrong wherever prose wraps differently from markup.
+#let units(..items, pack: "stacks", gutter: 9pt, spacing: 6pt) = {
+  let us = items.pos()
+  let stack(col) = {
+    for (i, u) in col.enumerate() {
+      u
+      if i + 1 < col.len() { v(spacing) }
+    }
+  }
+
+  if us.len() == 0 { return }
+  if pack == "single" { return stack(us) }
+  if pack == "grid" {
+    return grid(columns: (1fr, 1fr), gutter: gutter, row-gutter: spacing, ..us)
+  }
+
+  layout(size => {
+    let w = (size.width - gutter) / 2
+    let left = ()
+    let right = ()
+    let hl = 0pt
+    let hr = 0pt
+    for u in us {
+      let h = measure(box(width: w, u)).height
+      if hl <= hr { left.push(u); hl += h } else { right.push(u); hr += h }
+    }
+    grid(columns: (1fr, 1fr), gutter: gutter, align: top,
+         stack(left), stack(right))
+  })
+}
